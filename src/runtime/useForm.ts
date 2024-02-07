@@ -5,7 +5,7 @@ import { reactive, watch } from '#imports'
 export function useForm<TData extends object, Tresp>(
   schema: z.ZodType<TData> | (() => z.ZodType<TData>),
   init: Required<TData> | (() => Required<TData>),
-  cb: (form: TData) => Tresp,
+  cb: (form: TData) => Promise<Tresp>,
   options?: {
     formErrorMessage?: string
     resetOn?: {
@@ -24,7 +24,7 @@ export function useForm<TData extends object, Tresp>(
       : JSON.parse(JSON.stringify(init))
   }
 
-  const form: TData & Form<TData, Tresp> = {
+  const form: TData & Form<TData, Tresp> = reactive({
     ...getInitialData(),
     data() {
       const data = {} as TData
@@ -35,6 +35,7 @@ export function useForm<TData extends object, Tresp>(
 
       return data
     },
+    submitting: false,
     setData(data) {
       Object.assign(this, data)
     },
@@ -56,42 +57,101 @@ export function useForm<TData extends object, Tresp>(
       form.errors.clear()
       form.validatedKeys.clear()
     },
-    submit() {
-      const data = form.validate()
+    async submit(o) {
+      if (form.submitting)
+        // eslint-disable-next-line prefer-promise-reject-errors
+        return Promise.reject(undefined)
 
-      return cb(data)
+      try {
+        const data = form.validate()
+
+        const onBefore = await (o?.onBefore?.(data) ?? Promise.resolve(true))
+
+        if (!onBefore)
+          return Promise.reject(new Error('Submission canceled'))
+
+        form.submitting = true
+
+        const resp = await cb(data)
+
+        if (o?.onSuccess)
+          return o.onSuccess(resp, data)
+
+        return resp
+      }
+      catch (error) {
+        let e = error instanceof Error ? error : new Error('Invalid form data')
+
+        if (o?.onError)
+          e = await o.onError(e, form.data())
+
+        return Promise.reject(e)
+      }
+      finally {
+        form.submitting = false
+      }
     },
     isValid: (...keys) => {
+      if (!form.isTouched(...keys))
+        return false
+
       if (keys.length === 0)
         return form.errors.size === 0
 
-      for (const key of keys) {
-        if (form.errors.has(key))
-          return false
-      }
-      return true
+      return keys.reduce((acc, key) => acc && !form.errors.has(key), true)
     },
-    isDirty: (...keys) => {
+    isInvalid: (...keys) => {
+      if (!form.isTouched(...keys))
+        return false
+
+      if (keys.length === 0)
+        return form.errors.size > 0
+
+      return keys.reduce((acc, key) => acc || form.errors.has(key), false)
+    },
+    isTouched: (...keys) => {
       if (keys.length === 0)
         return form.validatedKeys.size > 0
 
-      let check = true
-
-      for (const key of keys) {
-        if (!check)
-          break
-
-        if (!form.validatedKeys.has(key))
-          check = false
+      return keys.reduce((acc, key) => acc && form.validatedKeys.has(key), true)
+    },
+    touch(...keys) {
+      if (keys.length === 0) {
+        touchAll(form.data())
+        return
       }
 
-      return check
+      keys.forEach(key => form.validatedKeys.add(key))
     },
+    forgetErrors(...keys) {
+      if (keys.length === 0) {
+        form.errors.clear()
+        form.validatedKeys.clear()
+        return
+      }
+
+      keys.forEach((key) => {
+        form.errors.delete(key)
+        form.validatedKeys.delete(key)
+      })
+    },
+  }) as TData & Form<TData, Tresp>
+
+  function touchAll(obj: object, prefix?: string) {
+    Object.keys(obj).forEach((key) => {
+      const path = (prefix ? `${prefix}.${key}` : key) as NestedKeyOf<TData>
+      form.touch(path)
+
+      const value = obj[key as keyof typeof obj]
+
+      if (typeof value === 'object' && value !== null)
+        touchAll(value, path)
+    })
   }
 
   function validateForm(): TData {
-    form.errors.clear()
-    form.validatedKeys.clear()
+    form.forgetErrors()
+    form.touch()
 
     const result = typeof schema === 'function'
       ? schema().safeParse(form.data())
@@ -113,19 +173,15 @@ export function useForm<TData extends object, Tresp>(
 
   function validateKeys(...keys: (NestedKeyOf<TData>)[]) {
     const data = form.data()
+    form.forgetErrors(...keys)
+    form.touch(...keys)
 
     const result = typeof schema === 'function'
       ? schema().safeParse(data)
       : schema.safeParse(data)
 
-    if (result.success) {
-      keys.forEach((key) => {
-        form.validatedKeys.add(key)
-        form.errors.clear()
-      })
-
+    if (result.success)
       return result.data
-    }
 
     if ('error' in result) {
       let hasError = false
@@ -167,5 +223,5 @@ export function useForm<TData extends object, Tresp>(
   if (options?.resetOn)
     watch(options?.resetOn.watch, form.reset, options?.resetOn.options)
 
-  return reactive(form) as any
+  return form
 }

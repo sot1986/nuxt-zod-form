@@ -1,3 +1,4 @@
+<!-- eslint-disable no-console -->
 <script setup lang="ts">
 import { z } from 'zod'
 import { useForm } from '#imports'
@@ -32,9 +33,9 @@ const form = useForm(RegisterSchema, {
   <div id="view">
     <h1>Playground</h1>
     <form @reset.prevent="form.reset" @submit.prevent="form.submit">
-      <div class="field">
+      <fieldset class="field">
         <label for="email">Email</label>
-        <div>
+        <div class="input-field">
           <input
             id="email" v-model="form.email" name="email" type="text"
             @change="form.validate('email')"
@@ -42,13 +43,14 @@ const form = useForm(RegisterSchema, {
           <p v-if="form.error('email')">
             {{ form.error('email') }}
           </p>
-          <span>{{ form.isValid('email') }}</span>
+          <span v-if="form.isValid('email')">OK</span>
+          <span v-else-if="form.isInvalid('email')">X</span>
         </div>
-      </div>
+      </fieldset>
 
-      <div class="field">
+      <fieldset class="field">
         <label for="password">Password</label>
-        <div>
+        <div class="input-field">
           <input
             id="password" v-model="form.password" name="password" type="password"
             @change="form.validate('password')"
@@ -56,13 +58,14 @@ const form = useForm(RegisterSchema, {
           <p v-if="form.error('password')">
             {{ form.error('password') }}
           </p>
-          <span>{{ form.isValid('password') }}</span>
+          <span v-if="form.isValid('password')">OK</span>
+          <span v-else-if="form.isInvalid('password')">X</span>
         </div>
-      </div>
+      </fieldset>
 
-      <div class="field">
+      <fieldset class="field">
         <label for="passwordConfirmation">Password Confirmation</label>
-        <div>
+        <div class="input-field">
           <input
             id="passwordConfirmation" v-model="form.passwordConfirmation" name="passwordConfirmation" type="password"
             @change="form.validate('passwordConfirmation')"
@@ -70,9 +73,10 @@ const form = useForm(RegisterSchema, {
           <p v-if="form.error('passwordConfirmation')">
             {{ form.error('passwordConfirmation') }}
           </p>
-          <span>{{ form.isValid('passwordConfirmation') }}</span>
+          <span v-if="form.isValid('passwordConfirmation')">OK</span>
+          <span v-else-if="form.isInvalid('passwordConfirmation')">X</span>
         </div>
-      </div>
+      </fieldset>
 
       <div class="actions">
         <div>form valid: {{ form.isValid() }}</div>
@@ -111,11 +115,7 @@ const form = useForm(RegisterSchema, {
     flex-direction: row;
     justify-content: space-between;
     column-gap: 5rem;
-  }
-
-  .field p {
-    color: red;
-    position: absolute;;
+    border: 0;
   }
 
   .actions {
@@ -123,5 +123,22 @@ const form = useForm(RegisterSchema, {
     flex-direction: row;
     justify-content: flex-end;
     column-gap: 2rem;
+  }
+
+  .input-field {
+    position: relative;
+    display: flex;
+  }
+
+  .input-field p {
+    position: absolute;
+    color: red;
+    padding-top: 6px;
+  }
+
+  .input-field span {
+    position: absolute;
+    left: 100%;
+    padding-left: 0.5rem;
   }
 </style>

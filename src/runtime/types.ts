@@ -35,15 +35,26 @@ export type NestedKeyOf<T> = T extends Record<infer Key, unknown>
         : never
   : never
 
-export interface Form<TData extends object, Tresp = unknown> {
+interface SubmitOptions<TData extends object, TResp> {
+  validate?: boolean
+  onError?: (error: Error, data: TData) => Promise<Error>
+  onBefore?: (data: TData) => Promise<boolean>
+  onSuccess?: <T = TResp>(resp: T, data: TData) => Promise<TResp>
+}
+
+export interface Form<TData extends object, Tresp> {
   data: () => TData
   setData: (data: TData) => void
   errors: Map<NestedKeyOf<TData>, string>
   validatedKeys: Set<NestedKeyOf<TData>>
+  submitting: boolean
   error: (key: NestedKeyOf<TData>) => string | undefined
   validate: (...keys: (NestedKeyOf<TData>)[]) => TData
   reset: () => void
-  submit: () => Tresp
+  submit: (options?: SubmitOptions<TData, Tresp>) => Promise<Tresp>
   isValid: (...keys: (NestedKeyOf<TData>)[]) => boolean
-  isDirty: (...keys: (NestedKeyOf<TData>)[]) => boolean
+  isInvalid: (...keys: (NestedKeyOf<TData>)[]) => boolean
+  isTouched: (...keys: (NestedKeyOf<TData>)[]) => boolean
+  touch(...key: (NestedKeyOf<TData>)[]): void
+  forgetErrors: (...keys: (NestedKeyOf<TData>)[]) => void
 }

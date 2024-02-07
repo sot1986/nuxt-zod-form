@@ -24,5 +24,6 @@ export default antfu({
     '**/fixtures',
     'dist',
     'node_modules',
+    '**/types.ts',
   ],
 })
