@@ -1,6 +1,14 @@
 /* eslint-disable no-console */
-import { defineNuxtPlugin } from '#app'
+import { defineNuxtPlugin } from '#imports'
 
-export default defineNuxtPlugin((_nuxtApp) => {
-  console.log('Plugin injected by my-module!')
+export default defineNuxtPlugin(() => {
+  const precFetch = $fetch.create({
+    onResponseError: (response) => {
+      console.log('onResponseError', response)
+    },
+  })
+
+  return {
+    provide: { precFetch },
+  }
 })

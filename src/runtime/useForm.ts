@@ -1,5 +1,6 @@
 import type { z } from 'zod'
 import type { Form, NestedKeyOf } from './types'
+import { makeValidator } from './validator'
 import { reactive, watch } from '#imports'
 
 export function useForm<TData extends object, Tresp>(
@@ -24,7 +25,9 @@ export function useForm<TData extends object, Tresp>(
       : JSON.parse(JSON.stringify(init))
   }
 
-  const form: TData & Form<TData, Tresp> = reactive({
+  const validator = makeValidator(schema, options)
+
+  const form = reactive<TData & Form<TData, Tresp>>({
     ...getInitialData(),
     data() {
       const data = {} as TData
@@ -36,21 +39,36 @@ export function useForm<TData extends object, Tresp>(
       return data
     },
     submitting: false,
+    validating: false,
     setData(data) {
-      Object.assign(this, data)
+      Object.assign(form, data)
     },
     validatedKeys: new Set<NestedKeyOf<TData>>(),
     errors: new Map<NestedKeyOf<TData>, string>(),
     error(key) {
-      return form.errors.get(key)
+      if (key)
+        return form.errors.get(key)
+
+      const firstKey = Array.from(form.errors.keys()).at(0)
+      if (firstKey)
+        return form.errors.get(firstKey)
+
+      return undefined
     },
-    validate(...keys) {
-      if (!keys.length)
-        return validateForm()
+    async validate(...keys) {
+      try {
+        if (!keys.length) {
+          const data = await validateForm()
+          return data
+        }
 
-      validateKeys(...keys)
+        const data = validateKeys(...keys)
 
-      return form.data()
+        return Promise.resolve(data ?? false)
+      }
+      catch (error) {
+        return Promise.resolve(false)
+      }
     },
     reset() {
       Object.assign(this, getInitialData())
@@ -59,11 +77,13 @@ export function useForm<TData extends object, Tresp>(
     },
     async submit(o) {
       if (form.submitting)
-        // eslint-disable-next-line prefer-promise-reject-errors
-        return Promise.reject(undefined)
+        return Promise.resolve(null)
 
       try {
-        const data = form.validate()
+        const data = await form.validate()
+
+        if (!data)
+          throw new Error('Invalid form data')
 
         const onBefore = await (o?.onBefore?.(data) ?? Promise.resolve(true))
 
@@ -80,12 +100,14 @@ export function useForm<TData extends object, Tresp>(
         return resp
       }
       catch (error) {
-        let e = error instanceof Error ? error : new Error('Invalid form data')
+        let e = error instanceof Error ? error : null
 
-        if (o?.onError)
-          e = await o.onError(e, form.data())
+        if (!o?.onError || !e)
+          return Promise.resolve(null)
 
-        return Promise.reject(e)
+        e = await o.onError(e, form.data())
+
+        return e ? Promise.reject(e) : Promise.resolve(null)
       }
       finally {
         form.submitting = false
@@ -149,23 +171,19 @@ export function useForm<TData extends object, Tresp>(
     })
   }
 
-  function validateForm(): TData {
+  async function validateForm(): Promise<TData> {
     form.forgetErrors()
     form.touch()
 
-    const result = typeof schema === 'function'
-      ? schema().safeParse(form.data())
-      : schema.safeParse(form.data())
+    const result = await validator.validate(form.data())
 
     if (result.success)
       return result.data
 
-    if ('error' in result) {
-      for (const err of result.error.errors) {
-        const key = err.path.join('.') as NestedKeyOf<TData>
-        form.errors.set(key, err.message)
-        form.validatedKeys.add(key)
-      }
+    for (const err of Object.entries<string>(result.errors)) {
+      const key = err[0] as NestedKeyOf<TData>
+      form.errors.set(key, err[1])
+      form.validatedKeys.add(key)
     }
 
     throw new Error(options?.formErrorMessage ?? 'Invalid form data')

@@ -139,7 +139,7 @@ describe('test base useForm', () => {
     expect(form.isValid()).toBe(false)
     expect(form.isTouched()).toBe(false)
 
-    expect(() => form.validate()).toThrow()
+    await expect(() => form.validate()).rejects.toThrowError('Invalid form data')
     expect(form.isTouched()).toBe(true)
     expect(form.isInvalid()).toBe(true)
 
@@ -216,7 +216,7 @@ describe('test base useForm', () => {
       tags: ['tag1', 'tag2'],
     }, data => Promise.resolve(data))
 
-    await expect (() => form.submit()).rejects.toThrowError('Invalid form data')
+    await expect(() => form.submit()).toBe(null)
 
     form.age = 25
     expect(await form.submit()).toEqual({
@@ -251,7 +251,7 @@ describe('test base useForm', () => {
       tags: ['tag1', 'tag2'],
     }, () => Promise.resolve())
 
-    expect(() => form.validate('age')).toThrow()
+    await expect(() => form.validate('age')).toBe(false)
     expect(form.isTouched('age')).toBe(true)
     expect(form.isInvalid('age')).toBe(true)
 

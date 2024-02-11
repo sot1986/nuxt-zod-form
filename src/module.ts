@@ -1,4 +1,4 @@
-import { addImports, addPlugin, createResolver, defineNuxtModule } from '@nuxt/kit'
+import { addImports, addPlugin, addServerImports, createResolver, defineNuxtModule } from '@nuxt/kit'
 
 // Module options TypeScript interface definition
 export interface ModuleOptions {}
@@ -15,6 +15,13 @@ export default defineNuxtModule<ModuleOptions>({
 
     // Do not add the extension since the `.ts` will be transpiled to `.mjs` after `npm run prepack`
     addPlugin(resolver.resolve('./runtime/plugin'))
+
+    addServerImports([
+      {
+        from: resolver.resolve('./runtime/definePrecognitiveEventHandler'),
+        name: 'definePrecognitiveEventHandler',
+      },
+    ])
 
     addImports({
       name: 'useForm',

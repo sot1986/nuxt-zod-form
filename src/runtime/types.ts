@@ -35,9 +35,47 @@ export type NestedKeyOf<T> = T extends Record<infer Key, unknown>
         : never
   : never
 
+interface SuccessValidation<TData> {
+  success: true
+  data: TData
+  keys?: NestedKeyOf<TData>[]
+}
+
+export interface ValidateOptions<TData> {
+  keys?: NestedKeyOf<TData>[]
+}
+
+export interface ErrorValidation<TData> {
+  success: false
+  errors: {
+      path: string[]
+      message: string
+  }[]
+}
+
+export interface ErrorResponseData<TData> {
+  success: false
+  errors: Record<NestedKeyOf<TData>, string>
+  error: string
+  keys?: NestedKeyOf<TData>[]
+}
+
+export type ValidationResult<TData extends object> =
+ SuccessValidation<TData> | ErrorValidation<TData> 
+
+export type ValidationResponseData<TData extends object> = {
+  success: true,
+  data: TData
+} | ErrorResponseData<TData>
+
+interface Validator<TData extends object> {
+  validateForm: () => TData
+  validateKeys: (...keys: (NestedKeyOf<TData>)[]) => void
+}
+
 interface SubmitOptions<TData extends object, TResp> {
   validate?: boolean
-  onError?: (error: Error, data: TData) => Promise<Error>
+  onError?: (error: Error, data: TData) => Promise<Error|null>
   onBefore?: (data: TData) => Promise<boolean>
   onSuccess?: <T = TResp>(resp: T, data: TData) => Promise<TResp>
 }
@@ -48,10 +86,11 @@ export interface Form<TData extends object, Tresp> {
   errors: Map<NestedKeyOf<TData>, string>
   validatedKeys: Set<NestedKeyOf<TData>>
   submitting: boolean
-  error: (key: NestedKeyOf<TData>) => string | undefined
-  validate: (...keys: (NestedKeyOf<TData>)[]) => TData
+  validating: boolean
+  error: (key?: NestedKeyOf<TData>) => string | undefined
+  validate: (...keys: (NestedKeyOf<TData>)[]) => Promise<TData|false>
   reset: () => void
-  submit: (options?: SubmitOptions<TData, Tresp>) => Promise<Tresp>
+  submit: (options?: SubmitOptions<TData, Tresp>) => Promise<Tresp|null>
   isValid: (...keys: (NestedKeyOf<TData>)[]) => boolean
   isInvalid: (...keys: (NestedKeyOf<TData>)[]) => boolean
   isTouched: (...keys: (NestedKeyOf<TData>)[]) => boolean

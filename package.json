@@ -1,7 +1,7 @@
 {
   "name": "nuxt-zod-form",
   "type": "module",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Nuxt module to use zod to create forms with frontend validation",
   "author": {
     "name": "sot1986",
@@ -48,6 +48,8 @@
     "changelogen": "^0.5.5",
     "eslint": "^8.56.0",
     "nuxt": "^3.9.3",
-    "vitest": "^1.0.0"
+    "typescript": "^5.3.3",
+    "vitest": "^1.0.0",
+    "vue-tsc": "^1.8.27"
   }
 }
