@@ -58,8 +58,8 @@ async function tryRegister() {
           <p v-if="form.error('username')">
             {{ form.error('username') }}
           </p>
-          <span v-if="form.isValid('username')">OK</span>
-          <span v-else-if="form.isInvalid('username')">X</span>
+          <span v-if="form.valid('username')">OK</span>
+          <span v-else-if="form.invalid('username')">X</span>
         </div>
       </fieldset>
 
@@ -73,8 +73,8 @@ async function tryRegister() {
           <p v-if="form.error('email')">
             {{ form.error('email') }}
           </p>
-          <span v-if="form.isValid('email')">OK</span>
-          <span v-else-if="form.isInvalid('email')">X</span>
+          <span v-if="form.valid('email')">OK</span>
+          <span v-else-if="form.invalid('email')">X</span>
         </div>
       </fieldset>
 
@@ -88,8 +88,8 @@ async function tryRegister() {
           <p v-if="form.error('password')">
             {{ form.error('password') }}
           </p>
-          <span v-if="form.isValid('password')">OK</span>
-          <span v-else-if="form.isInvalid('password')">X</span>
+          <span v-if="form.valid('password')">OK</span>
+          <span v-else-if="form.invalid('password')">X</span>
         </div>
       </fieldset>
 
@@ -103,13 +103,13 @@ async function tryRegister() {
           <p v-if="form.error('passwordConfirmation')">
             {{ form.error('passwordConfirmation') }}
           </p>
-          <span v-if="form.isValid('passwordConfirmation')">OK</span>
-          <span v-else-if="form.isInvalid('passwordConfirmation')">X</span>
+          <span v-if="form.valid('passwordConfirmation')">OK</span>
+          <span v-else-if="form.invalid('passwordConfirmation')">X</span>
         </div>
       </fieldset>
 
       <div class="actions">
-        <div>form valid: {{ form.isValid() }}</div>
+        <div>form valid: {{ form.valid() }}</div>
         <button type="reset">
           Reset
         </button>

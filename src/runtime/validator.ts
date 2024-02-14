@@ -1,5 +1,5 @@
 import type { z } from 'zod'
-import type { ErrorResponseData, ErrorValidation, NestedKeyOf, ValidateOptions, ValidationResponseData, ValidationResult } from './types'
+import type { ErrorResponseData, ErrorValidation, NestedKeyOf, ValidationResponseData, ValidationResult } from './types'
 
 export function makeValidator<TData extends object>(
   schema: z.ZodSchema<TData> | (() => z.ZodSchema<TData>),
@@ -12,12 +12,12 @@ export function makeValidator<TData extends object>(
 
   async function validate(
     form: TData,
-    validateOptions?: ValidateOptions<TData>,
+    keys?: NestedKeyOf<TData>[],
   ): Promise<ValidationResponseData<TData>> {
     const zodResult = await zodParser.parse(form)
 
     if (!zodResult.success)
-      return errorResponseData(zodResult, validateOptions?.keys, options)
+      return errorResponseData(zodResult, keys, options)
 
     if (!options?.additionalValidation)
       return { success: true, data: zodResult.data }
@@ -25,7 +25,7 @@ export function makeValidator<TData extends object>(
     const additionalResult = await options.additionalValidation(form)
 
     if (!additionalResult.success)
-      return errorResponseData(additionalResult, validateOptions?.keys, options)
+      return errorResponseData(additionalResult, keys, options)
 
     return { success: true, data: additionalResult.data }
   }
@@ -33,6 +33,27 @@ export function makeValidator<TData extends object>(
   return {
     validate,
   }
+}
+
+export function getAllNestedKeys<
+  TData extends object,
+  TPrefix extends string | undefined = undefined,
+>(
+  obj: TData,
+  prefix?: TPrefix,
+  keys: string[] = [],
+): TPrefix extends undefined ? NestedKeyOf<TData>[] : string[] {
+  Object.keys(obj).forEach((key) => {
+    const path = (prefix ? `${prefix}.${key}` : key)
+    keys.push(path)
+
+    const value = obj[key as keyof typeof obj]
+
+    if (typeof value === 'object' && value !== null)
+      getAllNestedKeys(value, path, keys)
+  })
+
+  return keys as TPrefix extends undefined ? NestedKeyOf<TData>[] : string[]
 }
 
 export function makeZodParser<TData extends object>(
@@ -69,7 +90,7 @@ export function errorResponseData<TData extends object>(
   options?: { formErrorMessage?: string },
 ): ErrorResponseData<TData> {
   const errors = new Map<NestedKeyOf<TData>, string>()
-  const message = options?.formErrorMessage ?? 'Invalid form data'
+  const message = options?.formErrorMessage ?? result.errors.at(0)?.message ?? 'Invalid data.'
 
   for (const err of result.errors) {
     const key = err.path.join('.') as NestedKeyOf<TData>

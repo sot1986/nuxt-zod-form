@@ -1,6 +1,6 @@
 export default defineNuxtConfig({
   modules: ['../src/module'],
-  myModule: {},
+  nuxtZodForm: {},
   devtools: { enabled: true },
   typescript: {
     typeCheck: true,

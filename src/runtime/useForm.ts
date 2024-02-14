@@ -1,7 +1,9 @@
 import type { z } from 'zod'
+import debounce from 'lodash-es/debounce'
+import type { ModuleOptions } from '../module'
 import type { Form, NestedKeyOf } from './types'
-import { makeValidator } from './validator'
-import { reactive, watch } from '#imports'
+import { getAllNestedKeys, makeValidator } from './validator'
+import { reactive, useRuntimeConfig, watch } from '#imports'
 
 export function useForm<TData extends object, Tresp>(
   schema: z.ZodType<TData> | (() => z.ZodType<TData>),
@@ -21,8 +23,8 @@ export function useForm<TData extends object, Tresp>(
 
   function getInitialData(): TData {
     return typeof init === 'function'
-      ? JSON.parse(JSON.stringify(init()))
-      : JSON.parse(JSON.stringify(init))
+      ? structuredClone(init())
+      : structuredClone(init)
   }
 
   const validator = makeValidator(schema, options)
@@ -38,13 +40,15 @@ export function useForm<TData extends object, Tresp>(
 
       return data
     },
-    submitting: false,
+    processing: false,
     validating: false,
+    validationTimeout: (useRuntimeConfig().public.nuxtZodForm as ModuleOptions).validationTimeout,
+    disabled: () => form.processing || form.validating,
     setData(data) {
       Object.assign(form, data)
     },
     validatedKeys: new Set<NestedKeyOf<TData>>(),
-    errors: new Map<NestedKeyOf<TData>, string>(),
+    errors: new Map<string, string>(),
     error(key) {
       if (key)
         return form.errors.get(key)
@@ -55,20 +59,30 @@ export function useForm<TData extends object, Tresp>(
 
       return undefined
     },
-    async validate(...keys) {
-      try {
-        if (!keys.length) {
-          const data = await validateForm()
-          return data
-        }
+    validate: (...keys) => {
+      const fn = debounce(
+        async () => {
+          try {
+            if (form.validating) {
+              Promise.reject(new Error('Form already submitted for validation.'))
+              return
+            }
 
-        const data = validateKeys(...keys)
+            if (keys.length) {
+              await validateKeys(...keys)
+              return
+            }
 
-        return Promise.resolve(data ?? false)
-      }
-      catch (error) {
-        return Promise.resolve(false)
-      }
+            await validateForm()
+          }
+          catch (error) {
+            console.error(error)
+          }
+        },
+        form.validationTimeout,
+        { trailing: true, leading: false },
+      )
+      return fn()
     },
     reset() {
       Object.assign(this, getInitialData())
@@ -76,21 +90,18 @@ export function useForm<TData extends object, Tresp>(
       form.validatedKeys.clear()
     },
     async submit(o) {
-      if (form.submitting)
-        return Promise.resolve(null)
+      if (form.disabled())
+        return Promise.reject(new Error('Form is currently disabled.'))
 
       try {
-        const data = await form.validate()
+        const data = await validateForm()
 
-        if (!data)
-          throw new Error('Invalid form data')
-
-        const onBefore = await (o?.onBefore?.(data) ?? Promise.resolve(true))
+        const onBefore = await (o?.onBefore?.(data) ?? true)
 
         if (!onBefore)
           return Promise.reject(new Error('Submission canceled'))
 
-        form.submitting = true
+        form.processing = true
 
         const resp = await cb(data)
 
@@ -100,21 +111,19 @@ export function useForm<TData extends object, Tresp>(
         return resp
       }
       catch (error) {
-        let e = error instanceof Error ? error : null
+        const e = error instanceof Error ? error : new Error('Invalid form')
 
-        if (!o?.onError || !e)
-          return Promise.resolve(null)
+        if (o?.onError)
+          await o?.onError(e, form.data())
 
-        e = await o.onError(e, form.data())
-
-        return e ? Promise.reject(e) : Promise.resolve(null)
+        return Promise.reject(e)
       }
       finally {
-        form.submitting = false
+        form.processing = false
       }
     },
-    isValid: (...keys) => {
-      if (!form.isTouched(...keys))
+    valid: (...keys) => {
+      if (!form.touched(...keys))
         return false
 
       if (keys.length === 0)
@@ -122,8 +131,8 @@ export function useForm<TData extends object, Tresp>(
 
       return keys.reduce((acc, key) => acc && !form.errors.has(key), true)
     },
-    isInvalid: (...keys) => {
-      if (!form.isTouched(...keys))
+    invalid: (...keys) => {
+      if (!form.touched(...keys))
         return false
 
       if (keys.length === 0)
@@ -131,7 +140,7 @@ export function useForm<TData extends object, Tresp>(
 
       return keys.reduce((acc, key) => acc || form.errors.has(key), false)
     },
-    isTouched: (...keys) => {
+    touched: (...keys) => {
       if (keys.length === 0)
         return form.validatedKeys.size > 0
 
@@ -139,7 +148,7 @@ export function useForm<TData extends object, Tresp>(
     },
     touch(...keys) {
       if (keys.length === 0) {
-        touchAll(form.data())
+        getAllNestedKeys(form.data()).forEach(key => form.validatedKeys.add(key))
         return
       }
 
@@ -159,82 +168,56 @@ export function useForm<TData extends object, Tresp>(
     },
   }) as TData & Form<TData, Tresp>
 
-  function touchAll(obj: object, prefix?: string) {
-    Object.keys(obj).forEach((key) => {
-      const path = (prefix ? `${prefix}.${key}` : key) as NestedKeyOf<TData>
-      form.touch(path)
-
-      const value = obj[key as keyof typeof obj]
-
-      if (typeof value === 'object' && value !== null)
-        touchAll(value, path)
-    })
-  }
-
   async function validateForm(): Promise<TData> {
-    form.forgetErrors()
-    form.touch()
+    try {
+      form.validating = true
+      form.forgetErrors()
+      form.touch()
 
-    const result = await validator.validate(form.data())
+      const result = await validator.validate(form.data())
 
-    if (result.success)
-      return result.data
+      if (result.success)
+        return result.data
 
-    for (const err of Object.entries<string>(result.errors)) {
-      const key = err[0] as NestedKeyOf<TData>
-      form.errors.set(key, err[1])
-      form.validatedKeys.add(key)
+      for (const err of Object.entries<string>(result.errors)) {
+        const key = err[0] as NestedKeyOf<TData>
+        form.errors.set(key, err[1])
+        form.validatedKeys.add(key)
+      }
+
+      return Promise.reject(options?.formErrorMessage ?? 'Invalid form data')
     }
-
-    throw new Error(options?.formErrorMessage ?? 'Invalid form data')
+    finally {
+      form.validating = false
+    }
   }
 
-  function validateKeys(...keys: (NestedKeyOf<TData>)[]) {
-    const data = form.data()
-    form.forgetErrors(...keys)
-    form.touch(...keys)
+  async function validateKeys(...keys: (NestedKeyOf<TData>)[]): Promise<void> {
+    try {
+      form.validating = true
+      const result = await validator.validate(form.data())
+      form.forgetErrors(...keys)
+      form.touch(...keys)
 
-    const result = typeof schema === 'function'
-      ? schema().safeParse(data)
-      : schema.safeParse(data)
+      if (result.success)
+        return
 
-    if (result.success)
-      return result.data
-
-    if ('error' in result) {
       let hasError = false
 
       keys.forEach((key) => {
-        const err = result.error.errors.find(e => e.path.join('.') === key)
         form.validatedKeys.add(key)
 
-        if (err) {
+        if (key in result.errors) {
           hasError = true
-          form.errors.set(key, err.message)
-
-          return
+          form.errors.set(key, result.errors[key])
         }
-
-        form.errors.delete(key)
-      })
-
-      form.validatedKeys.forEach((key) => {
-        if (key in keys)
-          return
-
-        const err = result.error.errors.find(e => e.path.join('.') === key)
-
-        if (err) {
-          hasError = true
-          form.errors.set(key, err.message)
-          return
-        }
-
-        form.errors.delete(key)
       })
 
       if (hasError)
-        throw new Error(options?.formErrorMessage ?? 'Invalid form data')
+        return Promise.reject(new Error(options?.formErrorMessage ?? 'Invalid form data'))
+    }
+    finally {
+      form.validating = false
     }
   }
 

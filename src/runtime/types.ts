@@ -1,3 +1,5 @@
+import type debounce from "lodash-es/debounce"
+
 type ArrayKeys<T extends unknown[]> =
 T extends [unknown, ...unknown[]]
   ? T extends Record<infer Index, unknown>
@@ -40,11 +42,6 @@ interface SuccessValidation<TData> {
   data: TData
   keys?: NestedKeyOf<TData>[]
 }
-
-export interface ValidateOptions<TData> {
-  keys?: NestedKeyOf<TData>[]
-}
-
 export interface ErrorValidation<TData> {
   success: false
   errors: {
@@ -55,7 +52,7 @@ export interface ErrorValidation<TData> {
 
 export interface ErrorResponseData<TData> {
   success: false
-  errors: Record<NestedKeyOf<TData>, string>
+  errors: Record<string, string>
   error: string
   keys?: NestedKeyOf<TData>[]
 }
@@ -75,25 +72,29 @@ interface Validator<TData extends object> {
 
 interface SubmitOptions<TData extends object, TResp> {
   validate?: boolean
-  onError?: (error: Error, data: TData) => Promise<Error|null>
-  onBefore?: (data: TData) => Promise<boolean>
+  onError?: (error: Error, data: TData) => Promise<never> | never
+  onBefore?: (data: TData) => Promise<boolean> | boolean
   onSuccess?: <T = TResp>(resp: T, data: TData) => Promise<TResp>
 }
 
 export interface Form<TData extends object, Tresp> {
   data: () => TData
   setData: (data: TData) => void
-  errors: Map<NestedKeyOf<TData>, string>
+  errors: Map<string, string>
   validatedKeys: Set<NestedKeyOf<TData>>
-  submitting: boolean
+  processing: boolean
   validating: boolean
+  validationTimeout:  Readonly<number>
+  disabled: () => boolean
   error: (key?: NestedKeyOf<TData>) => string | undefined
-  validate: (...keys: (NestedKeyOf<TData>)[]) => Promise<TData|false>
+  validate: (...keys: NestedKeyOf<TData>[]) => ReturnType<ReturnType<typeof debounce<() => Promise<void>>>>
   reset: () => void
-  submit: (options?: SubmitOptions<TData, Tresp>) => Promise<Tresp|null>
-  isValid: (...keys: (NestedKeyOf<TData>)[]) => boolean
-  isInvalid: (...keys: (NestedKeyOf<TData>)[]) => boolean
-  isTouched: (...keys: (NestedKeyOf<TData>)[]) => boolean
+  submit: (options?: SubmitOptions<TData, Tresp>) => Promise<Tresp>
+  valid: (...keys: (NestedKeyOf<TData>)[]) => boolean
+  invalid: (...keys: (NestedKeyOf<TData>)[]) => boolean
+  touched: (...keys: (NestedKeyOf<TData>)[]) => boolean
   touch(...key: (NestedKeyOf<TData>)[]): void
   forgetErrors: (...keys: (NestedKeyOf<TData>)[]) => void
 }
+
+export type RequestMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
